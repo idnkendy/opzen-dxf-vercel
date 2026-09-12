@@ -95,6 +95,11 @@ import os
 import unicodedata
 import re
 
+# Đảm bảo tiến trình con luôn tìm thấy ezdxf
+for _p in ['/var/task/_vendor', '/var/task']:
+    if os.path.exists(_p) and _p not in sys.path:
+        sys.path.insert(0, _p)
+
 def _remove_vietnamese_accents(text):
     if not isinstance(text, str):
         return text
@@ -191,6 +196,15 @@ for _var_name in ['doc', 'dwg', 'dxf', 'drawing', 'model']:
 
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
+        # Bắt buộc truyền các thư mục vendor của Vercel vào PYTHONPATH cho tiến trình con
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        paths_to_add = [
+            "/var/task/_vendor",
+            "/var/task",
+            *sys.path
+        ]
+        combined_pythonpath = ":".join(filter(None, [p for p in paths_to_add if isinstance(p, str)] + [existing_pythonpath]))
+        env["PYTHONPATH"] = combined_pythonpath
 
         try:
             process = subprocess.run(
