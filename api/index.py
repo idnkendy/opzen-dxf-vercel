@@ -25,54 +25,40 @@ except Exception:
     EZDXF_AVAILABLE = False
     EZDXF_VERSION = None
 
-ACCENT_MAP = {
-    'à': 'a', 'á': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a',
-    'ă': 'a', 'ằ': 'a', 'ắ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
-    'â': 'a', 'ầ': 'a', 'ấ': 'a', 'ẩ': 'a', 'ẫ': 'a', 'ậ': 'a',
-    'è': 'e', 'é': 'e', 'ẻ': 'e', 'ẽ': 'e', 'ẹ': 'e',
-    'ê': 'e', 'ề': 'e', 'ế': 'e', 'ể': 'e', 'ễ': 'e', 'ệ': 'e',
-    'ì': 'i', 'í': 'i', 'ỉ': 'i', 'ĩ': 'i', 'ị': 'i',
-    'ò': 'o', 'ó': 'o', 'ỏ': 'o', 'õ': 'o', 'ọ': 'o',
-    'ô': 'o', 'ồ': 'o', 'ố': 'o', 'ổ': 'o', 'ỗ': 'o', 'ộ': 'o',
-    'ơ': 'o', 'ờ': 'o', 'ớ': 'o', 'ở': 'o', 'ỡ': 'o', 'ợ': 'o',
-    'ù': 'u', 'ú': 'u', 'ủ': 'u', 'ũ': 'u', 'ụ': 'u',
-    'ư': 'u', 'ừ': 'u', 'ứ': 'u', 'ử': 'u', 'ữ': 'u', 'ự': 'u',
-    'ỳ': 'y', 'ý': 'y', 'ỷ': 'y', 'ỹ': 'y', 'ỵ': 'y',
-    'À': 'A', 'Á': 'A', 'Ả': 'A', 'Ã': 'A', 'Ạ': 'A',
-    'Ă': 'A', 'Ằ': 'A', 'Ắ': 'A', 'Ẳ': 'A', 'Ẵ': 'A', 'Ặ': 'A',
-    'Â': 'A', 'Ầ': 'A', 'Ấ': 'A', 'Ẩ': 'A', 'Ẫ': 'A', 'Ậ': 'A',
-    'È': 'E', 'É': 'E', 'Ẻ': 'E', 'Ẽ': 'E', 'Ẹ': 'E',
-    'Ê': 'E', 'Ề': 'E', 'Ế': 'E', 'Ể': 'E', 'Ễ': 'E', 'Ệ': 'E',
-    'Ì': 'I', 'Í': 'I', 'Ỉ': 'I', 'Ĩ': 'I', 'Ị': 'I',
-    'Ò': 'O', 'Ó': 'O', 'Ỏ': 'O', 'Õ': 'O', 'Ọ': 'O',
-    'Ô': 'O', 'Ồ': 'O', 'Ố': 'O', 'Ổ': 'O', 'Ỗ': 'O', 'Ộ': 'O',
-    'Ơ': 'O', 'Ờ': 'O', 'Ớ': 'O', 'Ở': 'O', 'Ỡ': 'O', 'Ợ': 'O',
-    'Ù': 'U', 'Ú': 'U', 'Ủ': 'U', 'Ũ': 'U', 'Ụ': 'U',
-    'Ư': 'U', 'Ừ': 'U', 'Ứ': 'U', 'Ử': 'U', 'Ữ': 'U', 'Ự': 'U',
-    'Ỳ': 'Y', 'Ý': 'Y', 'Ỷ': 'Y', 'Ỹ': 'Y', 'Ỵ': 'Y',
-    'đ': 'd', 'Đ': 'D'
-}
-
-def remove_vietnamese_accents(text: str) -> str:
+def decode_autocad_unicode(text: str) -> str:
     if not isinstance(text, str):
         return str(text)
-    text = text.replace('²', '2').replace('³', '3')
-    pattern = re.compile("|".join(re.escape(k) for k in ACCENT_MAP.keys()))
-    res = pattern.sub(lambda m: ACCENT_MAP[m.group(0)], text)
-    nfkd = unicodedata.normalize('NFKD', res)
-    return ''.join(c for c in nfkd if not unicodedata.combining(c))
+    def repl_u(m):
+        try:
+            return chr(int(m.group(1), 16))
+        except Exception:
+            return ''
+    decoded = re.sub(r'[\\]+[uU]\+?([0-9A-Fa-f]{4})', repl_u, text)
+    return unicodedata.normalize('NFC', decoded)
 
 def sanitize_dxf_for_vietnamese(dxf_content: str) -> str:
     if not dxf_content:
         return dxf_content
 
     result = re.sub(
-        r'(2\r?\n[sS]tandard\r?\n[\s\S]*?3\r?\n)(?:txt(?:\.shx)?|simplex(?:\.shx)?)',
-        r'\g<1>Arial.ttf',
+        r'(\$ACADVER\r?\n\s*1\r?\n)(?:AC1009|AC1012|AC1014|AC1015|AC1018)\b',
+        r'\g<1>AC1024',
         dxf_content
     )
     result = re.sub(
-        r'(0\r?\nSTYLE\r?\n[\s\S]*?3\r?\n)(?:txt(?:\.shx)?|simplex(?:\.shx)?)',
+        r'(\$DWGCODEPAGE\r?\n\s*3\r?\n)(?:ANSI_[0-9]+|ASCII|DOS[0-9]+|ISO8859-[0-9]+)\b',
+        r'\g<1>UTF-8',
+        result,
+        flags=re.IGNORECASE
+    )
+    result = re.sub(
+        r'(2\r?\n[sS]tandard\r?\n[\s\S]*?3\r?\n)(?:txt(?:\.shx)?|simplex(?:\.shx)?|romans(?:\.shx)?|monotxt(?:\.shx)?|opensans[^\r\n]*|liberation[^\r\n]*)',
+        r'\g<1>Arial.ttf',
+        result,
+        flags=re.IGNORECASE
+    )
+    result = re.sub(
+        r'(0\r?\nSTYLE\r?\n[\s\S]*?3\r?\n)(?:txt(?:\.shx)?|simplex(?:\.shx)?|romans(?:\.shx)?|monotxt(?:\.shx)?|opensans[^\r\n]*|liberation[^\r\n]*)',
         r'\g<1>Arial.ttf',
         result,
         flags=re.IGNORECASE
@@ -85,7 +71,7 @@ def sanitize_dxf_for_vietnamese(dxf_content: str) -> str:
             val = lines[i + 1]
             if code == '3' and re.search(r'\.(ttf|shx|fon)$', val, re.IGNORECASE):
                 continue
-            lines[i + 1] = remove_vietnamese_accents(val)
+            lines[i + 1] = decode_autocad_unicode(val)
 
     return '\n'.join(lines)
 
@@ -95,37 +81,16 @@ import os
 import unicodedata
 import re
 
-# Đảm bảo tiến trình con luôn tìm thấy ezdxf
-for _p in ['/var/task/_vendor', '/var/task']:
-    if os.path.exists(_p) and _p not in sys.path:
-        sys.path.insert(0, _p)
-
-def _remove_vietnamese_accents(text):
+def _normalize_vietnamese_unicode(text):
     if not isinstance(text, str):
         return text
-    text = text.replace('²', '2').replace('³', '3')
-    text = text.replace('đ', 'd').replace('Đ', 'D')
-    nfkd = unicodedata.normalize('NFKD', text)
-    res = []
-    for c in nfkd:
-        if not unicodedata.combining(c):
-            if c in ('đ', '₫'):
-                res.append('d')
-            elif c == 'Đ':
-                res.append('D')
-            else:
-                res.append(c)
-    cleaned = ''.join(res)
     def repl_u(m):
         try:
-            ch = chr(int(m.group(1), 16))
-            nfkd_ch = unicodedata.normalize('NFKD', ch)
-            c_clean = ''.join([x for x in nfkd_ch if not unicodedata.combining(x)])
-            return 'd' if c_clean == 'đ' else ('D' if c_clean == 'Đ' else c_clean)
+            return chr(int(m.group(1), 16))
         except Exception:
             return ''
-    cleaned = re.sub(r'[\\]+[uU]\+([0-9A-Fa-f]{4})', repl_u, cleaned)
-    return cleaned
+    decoded = re.sub(r'[\\]+[uU]\+?([0-9A-Fa-f]{4})', repl_u, text)
+    return unicodedata.normalize('NFC', decoded)
 
 try:
     import ezdxf
@@ -134,37 +99,52 @@ try:
     _orig_saveas = Drawing.saveas
     def _safe_vietnamese_saveas(self, *args, **kwargs):
         try:
+            self.dxfversion = "AC1024"
+            self.encoding = "utf-8"
+            if "$ACADVER" in self.header:
+                self.header["$ACADVER"] = "AC1024"
+            self.header["$DWGCODEPAGE"] = "UTF-8"
             if "Standard" in self.styles:
                 self.styles.get("Standard").dxf.font = "Arial.ttf"
             for s in self.styles:
-                f = str(s.dxf.get("font", "")).lower()
-                if not f or f.startswith("txt") or f.startswith("simplex"):
-                    s.dxf.font = "Arial.ttf"
+                s.dxf.font = "Arial.ttf"
             if "VIETNAMESE" not in self.styles:
                 try:
                     self.styles.new("VIETNAMESE", dxfattribs={"font": "Arial.ttf"})
                 except Exception:
                     pass
             try:
-                for entity in self.modelspace():
-                    dxftype = entity.dxftype()
-                    if dxftype == "TEXT":
-                        entity.dxf.text = _remove_vietnamese_accents(entity.dxf.text)
-                    elif dxftype == "MTEXT":
-                        entity.text = _remove_vietnamese_accents(entity.text)
+                for layout in self.layouts:
+                    for entity in layout:
+                        dxftype = entity.dxftype()
+                        if dxftype in ("TEXT", "ATTRIB", "ATTDEF", "DIMENSION") and entity.dxf.hasattr("text"):
+                            entity.dxf.text = _normalize_vietnamese_unicode(entity.dxf.text)
+                        elif dxftype == "MTEXT":
+                            entity.text = _normalize_vietnamese_unicode(entity.text)
             except Exception:
                 pass
         except Exception:
             pass
+        kwargs["encoding"] = "utf-8"
         return _orig_saveas(self, *args, **kwargs)
 
     Drawing.saveas = _safe_vietnamese_saveas
 
     _orig_new = ezdxf.new
     def _safe_ezdxf_new(dxfversion="R2010", setup=True, **kwargs):
-        if isinstance(dxfversion, str) and dxfversion.upper() in ["R12", "AC1009"]:
+        if isinstance(dxfversion, str) and dxfversion.upper() in ["R12", "AC1009", "R2000", "AC1015", "R2004", "AC1018"]:
             dxfversion = "R2010"
-        return _orig_new(dxfversion=dxfversion, setup=setup, **kwargs)
+        doc = _orig_new(dxfversion=dxfversion, setup=setup, **kwargs)
+        try:
+            doc.dxfversion = "AC1024"
+            doc.encoding = "utf-8"
+            doc.header["$ACADVER"] = "AC1024"
+            doc.header["$DWGCODEPAGE"] = "UTF-8"
+            for s in doc.styles:
+                s.dxf.font = "Arial.ttf"
+        except Exception:
+            pass
+        return doc
     ezdxf.new = _safe_ezdxf_new
 except Exception:
     pass
@@ -196,7 +176,7 @@ for _var_name in ['doc', 'dwg', 'dxf', 'drawing', 'model']:
 
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
-        # Bắt buộc truyền các thư mục vendor của Vercel vào PYTHONPATH cho tiến trình con
+        # Crucial for Vercel Serverless: forward sys.path and Vercel _vendor site-packages
         existing_pythonpath = env.get("PYTHONPATH", "")
         paths_to_add = [
             "/var/task/_vendor",
